@@ -94,6 +94,11 @@ import { PROMPT_COMMANDS } from "./core/prompt-commands.js";
 import { pruneDoneTasksSync } from "./core/tasks-store.js";
 import { initLogger, log } from "./core/logger.js";
 import { installTerminationHandlers } from "./core/shutdown.js";
+import {
+  CONNECTION_FILE_VERSION,
+  pruneStaleConnectionFiles,
+  writeConnectionFile,
+} from "./app-sidecar/connection-file.js";
 import { stopRadio } from "./core/radio.js";
 import { enrichProcessPath } from "./core/shell-path.js";
 import type { ServeController } from "./modes/serve-mode.js";
@@ -522,12 +527,36 @@ async function main(): Promise<void> {
     }
     ctx.handle(req, res, url, method);
   });
+  // Set once the companion connection file exists; teardown calls it.
+  let removeConnectionFile: () => void = () => {};
   server.listen(port, host, () => {
     const addr = server.address() as AddressInfo;
     // The Rust shell reads this line to learn the daemon port (it already
     // knows the token — it set GG_APP_TOKEN; the field serves other spawners).
     process.stdout.write(`GG_APP_LISTENING ${addr.port} ${authToken}\n`);
     log("INFO", "app-sidecar", "daemon listening", { port: String(addr.port), host });
+    // Companion tools (tappy) find the open app through this file. A failure
+    // here must never stop the app itself from working.
+    void pruneStaleConnectionFiles(paths.agentDir)
+      .then(() =>
+        writeConnectionFile(paths.agentDir, {
+          version: CONNECTION_FILE_VERSION,
+          pid: process.pid,
+          host,
+          port: addr.port,
+          token: authToken,
+          startedAt: new Date().toISOString(),
+        }),
+      )
+      .then((remove) => {
+        removeConnectionFile = remove;
+        process.once("exit", remove);
+      })
+      .catch((error: unknown) => {
+        log("WARN", "app-sidecar", "connection file not written", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
   });
 
   const shellPid = process.ppid;
@@ -542,6 +571,8 @@ async function main(): Promise<void> {
       // group, and the app force-kills that group after 3 s. If a slow session
       // teardown is still pending then, these would never be stopped.
       for (const c of sessions.values()) c.stopBackgroundProcesses();
+      // Companions must stop seeing this daemon before its sessions wind down.
+      removeConnectionFile();
       clearInterval(parentWatch);
       // Radio playback is app-wide (one stream across all windows), so it stops
       // at the daemon level, not per session.

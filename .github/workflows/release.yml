@@ -66,11 +66,9 @@ jobs:
             echo "Release tag must point to a commit on origin/main" >&2
             exit 1
           }
-          required=(
-            TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-            APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
-            KEYCHAIN_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
-          )
+          # This fork (zahdourmoustafa/gg-coder) ships Windows only, so only the
+          # updater key is required. Restore the Apple names with the mac leg.
+          required=(TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
           for name in "${required[@]}"; do
             [[ -n "${!name:-}" ]] || {
               echo "Missing protected release secret: $name" >&2
@@ -86,8 +84,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-14 # Apple Silicon (arm64)
-            args: "--target aarch64-apple-darwin"
+          # macOS is omitted in this fork: it has no Apple Developer ID to sign
+          # and notarize with. Re-add `macos-14 / --target aarch64-apple-darwin`
+          # together with the Apple secrets in preflight.
           # NOTE: Intel macOS (x86_64) is intentionally omitted. GitHub's free
           # Intel mac runners are effectively unavailable (jobs queue for hours),
           # and a universal binary isn't viable here because the bundled Node
