@@ -99,6 +99,7 @@ import {
   pruneStaleConnectionFiles,
   writeConnectionFile,
 } from "./app-sidecar/connection-file.js";
+import { listWindows } from "./app-sidecar/window-list.js";
 import { stopRadio } from "./core/radio.js";
 import { enrichProcessPath } from "./core/shell-path.js";
 import type { ServeController } from "./modes/serve-mode.js";
@@ -489,6 +490,12 @@ async function main(): Promise<void> {
     // session exists; per-session callers still work through the same endpoint.
     if (method === "GET" && url === "/progress") {
       daemonJson(res, 200, progress.snapshot());
+      return;
+    }
+
+    // Companions (tappy) join an open window's conversation through this.
+    if (method === "GET" && url === "/windows") {
+      daemonJson(res, 200, { windows: listWindows(sessions.values()) });
       return;
     }
 

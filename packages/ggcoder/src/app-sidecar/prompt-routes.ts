@@ -138,6 +138,7 @@ export function handlePromptRoutes(
               enhancements?: unknown[];
               scheduled?: boolean;
               planRevision?: boolean;
+              origin?: string;
             }
           | undefined;
         try {
@@ -149,6 +150,7 @@ export function handlePromptRoutes(
               enhancements?: unknown[];
               scheduled?: boolean;
               planRevision?: boolean;
+              origin?: string;
             };
           };
           text = body.text ?? "";
@@ -169,6 +171,14 @@ export function handlePromptRoutes(
         // returns, so the turn looks frozen. The webview closes the band on
         // send; a racing /ask POST just 409s.
         ctx.asks.cancelAll({ action: "cancel", superseded: true });
+        // Every viewer of this session learns what was asked and by whom: an
+        // open window shows a prompt sent from a companion (tappy), and the
+        // companion mirrors one typed in the window. Each ignores its own.
+        ctx.broadcast("prompt_sent", {
+          text,
+          attachments: attachments.length,
+          origin: promptOrigin(meta?.origin),
+        });
         if (
           ctx.runLifecycle.running &&
           ctx.runLifecycle.isCancellationRequested(ctx.runLifecycle.generation)
@@ -473,4 +483,9 @@ export function handlePromptRoutes(
   }
 
   return false;
+}
+
+/** Who sent a prompt. The webview sends none, so absent means the window. */
+export function promptOrigin(value: unknown): string {
+  return typeof value === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(value) ? value : "window";
 }

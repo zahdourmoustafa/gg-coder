@@ -24,6 +24,7 @@ import {
   withOpenAsks,
 } from "./ask-user";
 import { formatTokenCount } from "./ActivityBar";
+import { isForeignPrompt } from "./foreign-prompt";
 import type { LiveToolEntry } from "./LiveToolPanel";
 
 /** Recent tool calls kept for the live views (the floating current-tool line
@@ -1204,6 +1205,15 @@ export function useAgentEvents(deps: AgentEventsDeps): AgentEvents {
           break;
         case "tasks_run_done":
           // Run-all sweep finished — nothing to render; the modal reflects it.
+          break;
+        case "prompt_sent":
+          // A companion (tappy, from the phone) sent this. The window's own
+          // sends already pushed their bubble, so only foreign origins render.
+          if (isForeignPrompt(d)) {
+            endStreamingText();
+            stickToBottomRef.current = true;
+            pushItem({ kind: "user", id: nextId(), text: String(d.text) });
+          }
           break;
         case "queued": {
           setQueuedCount(Number(d.count ?? 0));
