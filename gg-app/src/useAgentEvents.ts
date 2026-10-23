@@ -102,6 +102,8 @@ export interface AgentEventsDeps {
   handleAutopilotEvent: (e: SidecarEvent) => boolean;
   /** Whole-task status sees events before delegates consume their frames. */
   handleActivityEvent?: (e: SidecarEvent) => void;
+  /** A companion (tappy) asked this window to show a conversation. */
+  onCompanionOpen?: (request: { cwd: string; sessionPath?: string }) => void;
 
   setState: Dispatch<SetStateAction<AgentState | null>>;
   setTasks: Dispatch<SetStateAction<BackgroundTask[]>>;
@@ -155,6 +157,7 @@ export function useAgentEvents(deps: AgentEventsDeps): AgentEvents {
     handleKenEvent,
     handleAutopilotEvent,
     handleActivityEvent,
+    onCompanionOpen,
     setState,
     setTasks,
     setProjectTasks,
@@ -1206,6 +1209,16 @@ export function useAgentEvents(deps: AgentEventsDeps): AgentEvents {
         case "tasks_run_done":
           // Run-all sweep finished — nothing to render; the modal reflects it.
           break;
+        case "companion_open":
+          // tappy on the user's phone opened a conversation; show it here so
+          // what is typed on the phone runs in this window, on screen.
+          if (typeof d.cwd === "string" && d.cwd) {
+            onCompanionOpen?.({
+              cwd: d.cwd,
+              ...(typeof d.sessionPath === "string" && d.sessionPath ? { sessionPath: d.sessionPath } : {}),
+            });
+          }
+          break;
         case "prompt_sent":
           // A companion (tappy, from the phone) sent this. The window's own
           // sends already pushed their bubble, so only foreign origins render.
@@ -1478,6 +1491,7 @@ export function useAgentEvents(deps: AgentEventsDeps): AgentEvents {
       handleKenEvent,
       handleAutopilotEvent,
       handleActivityEvent,
+      onCompanionOpen,
       appendAssistant,
       pushItem,
       finalizeThinking,

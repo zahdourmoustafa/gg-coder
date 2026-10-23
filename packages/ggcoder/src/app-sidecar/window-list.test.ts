@@ -1,7 +1,7 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { listWindows, type WindowSource } from "./window-list.js";
+import { chooseOpenTarget, listWindows, type WindowSource } from "./window-list.js";
 
 function source(id: string, cwd: string, over: Partial<WindowSource> = {}): WindowSource {
   return {
@@ -47,5 +47,29 @@ describe("listWindows", () => {
 
   it("is empty with no sessions", () => {
     expect(listWindows([])).toEqual([]);
+  });
+});
+
+describe("chooseOpenTarget", () => {
+  it("prefers an idle, watched window already on the project", () => {
+    const picked = chooseOpenTarget(
+      [
+        source("busy-same", "/p", { isBusy: () => true }),
+        source("other", "/q", { clients: { size: 3 } }),
+        source("same", "/p"),
+        source("unwatched", "/p", { clients: { size: 0 } }),
+      ],
+      { cwd: "/p" },
+    );
+    expect(picked?.id).toBe("same");
+  });
+
+  it("falls back to the most-watched idle window, or none", () => {
+    expect(
+      chooseOpenTarget([source("a", "/x", { clients: { size: 1 } }), source("b", "/y", { clients: { size: 2 } })], {
+        cwd: "/p",
+      })?.id,
+    ).toBe("b");
+    expect(chooseOpenTarget([source("a", "/p", { isBusy: () => true })], { cwd: "/p" })).toBeUndefined();
   });
 });

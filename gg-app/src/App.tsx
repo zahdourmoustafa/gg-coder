@@ -47,6 +47,7 @@ import {
   focusWindowByOffset,
   arrangeAllWindows,
   restoreTarget,
+  selectProject,
   acceptPlan as acceptPlanIPC,
   subscribe,
   isSecondaryWindow,
@@ -996,6 +997,7 @@ function App(): React.ReactElement {
     handleKenEvent,
     handleAutopilotEvent,
     handleActivityEvent,
+    onCompanionOpen: openForCompanion,
     setState,
     setTasks,
     setProjectTasks,
@@ -2434,6 +2436,26 @@ function App(): React.ReactElement {
   // and force a re-hydrate against the new sidecar. Bumping the nonce re-runs
   // the hydrate effect even when needsProject is already false (switching
   // sessions from the reopened picker), which flipping the boolean alone won't.
+  /**
+   * tappy on the user's phone opened a conversation and asked this window to
+   * show it. The same path as choosing it in the project picker — re-point the
+   * session, then reset and re-hydrate — so the phone's prompts run here, on
+   * screen, rather than in a session no window displays.
+   */
+  function openForCompanion(request: { cwd: string; sessionPath?: string }): void {
+    void selectProject(request.cwd, request.sessionPath)
+      .then(() =>
+        showScreen(() => {
+          setShowPicker(false);
+          setNeedsProject(false);
+          resetForChosenProject();
+        }),
+      )
+      .catch((reason: unknown) => {
+        console.error("companion open failed:", reason);
+      });
+  }
+
   function onProjectChosen(): void {
     // Picker → workspace switches like every other screen change (showScreen).
     showScreen(resetForChosenProject);

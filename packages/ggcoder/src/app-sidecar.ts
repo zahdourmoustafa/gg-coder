@@ -99,7 +99,7 @@ import {
   pruneStaleConnectionFiles,
   writeConnectionFile,
 } from "./app-sidecar/connection-file.js";
-import { listWindows } from "./app-sidecar/window-list.js";
+import { chooseOpenTarget, listWindows } from "./app-sidecar/window-list.js";
 import { stopRadio } from "./core/radio.js";
 import { enrichProcessPath } from "./core/shell-path.js";
 import type { ServeController } from "./modes/serve-mode.js";
@@ -496,6 +496,43 @@ async function main(): Promise<void> {
     // Companions (tappy) join an open window's conversation through this.
     if (method === "GET" && url === "/windows") {
       daemonJson(res, 200, { windows: listWindows(sessions.values()) });
+      return;
+    }
+
+    // A companion (tappy on the phone) asks a window to show a conversation,
+    // so what is typed on the phone runs in a window on screen. The window does
+    // the switching itself — only the webview can re-point its own session —
+    // and the companion then finds it in /windows and joins it.
+    if (method === "POST" && url === "/windows/open") {
+      void daemonReadBody(req, res).then((raw) => {
+        if (raw === null) return;
+        let body: { cwd?: unknown; sessionPath?: unknown } = {};
+        try {
+          body = raw ? JSON.parse(raw) : {};
+        } catch {
+          // Treated as missing fields below.
+        }
+        if (typeof body.cwd !== "string" || !body.cwd) {
+          daemonJson(res, 400, { error: "cwd required" });
+          return;
+        }
+        const request = {
+          cwd: body.cwd,
+          ...(typeof body.sessionPath === "string" && body.sessionPath ? { sessionPath: body.sessionPath } : {}),
+        };
+        const target = chooseOpenTarget(sessions.values(), request);
+        if (!target) {
+          daemonJson(res, 409, { error: "no idle window can open it" });
+          return;
+        }
+        target.broadcast("companion_open", request);
+        log("INFO", "app-sidecar", "companion asked a window to open a conversation", {
+          window: target.id,
+          cwd: request.cwd,
+          resume: request.sessionPath ? "yes" : "no",
+        });
+        daemonJson(res, 202, { window: target.id });
+      });
       return;
     }
 
