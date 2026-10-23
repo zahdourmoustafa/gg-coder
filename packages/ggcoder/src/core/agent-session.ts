@@ -3471,6 +3471,11 @@ export class AgentSession {
     return this.sessionManager.listBranches(loaded.entries);
   }
 
+  /** Skills this session loaded, for a companion (tappy) to offer by name. */
+  getSkills(): readonly Skill[] {
+    return this.skills;
+  }
+
   /** Skills the safety scan kept out of this session, for the app/CLI to show. */
   getBlockedSkills(): readonly BlockedSkill[] {
     return this.blockedSkills;

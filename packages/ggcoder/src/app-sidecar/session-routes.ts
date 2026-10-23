@@ -5,6 +5,7 @@ import { goalRunningElsewhere } from "../core/goal-run-marker.js";
 import { goalCritterPick } from "../goals-agent/goals-agent.js";
 import { getSupportedThinkingLevels } from "../core/thinking-level.js";
 import { json } from "./http.js";
+import { skillRows } from "./skill-list.js";
 import type { SseClient } from "./session-types.js";
 import type { SessionRouteContext } from "./route-context.js";
 
@@ -69,6 +70,14 @@ export function handleSessionRoutes(
       ...ctx.kenStatePayload(),
       ...ctx.footerExtras(),
     });
+    return true;
+  }
+
+  // The skills this window's agent can load. The app itself has no picker —
+  // the agent loads skills on its own — but a companion (tappy) lists them so
+  // the user can ask for one by name from the phone.
+  if (method === "GET" && url === "/skills") {
+    json(res, 200, { skills: skillRows(ctx.session.getSkills()) });
     return true;
   }
 
