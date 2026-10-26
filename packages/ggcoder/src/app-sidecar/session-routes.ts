@@ -4,7 +4,8 @@ import { goalNeedsKickoff, goalPhase, goalWasInterrupted } from "../core/goals-s
 import { goalRunningElsewhere } from "../core/goal-run-marker.js";
 import { goalCritterPick } from "../goals-agent/goals-agent.js";
 import { getSupportedThinkingLevels } from "../core/thinking-level.js";
-import { json } from "./http.js";
+import { json, readBody } from "./http.js";
+import { parseDraft } from "./companion-draft.js";
 import { skillRows } from "./skill-list.js";
 import type { SseClient } from "./session-types.js";
 import type { SessionRouteContext } from "./route-context.js";
@@ -76,6 +77,22 @@ export function handleSessionRoutes(
   // The skills this window's agent can load. The app itself has no picker —
   // the agent loads skills on its own — but a companion (tappy) lists them so
   // the user can ask for one by name from the phone.
+  // What the user is typing on the phone, shown live in this window's message
+  // box. Display only: nothing reaches the agent until `/prompt`.
+  if (method === "POST" && url === "/draft") {
+    void readBody(req, res).then((raw) => {
+      if (raw === null) return;
+      const draft = parseDraft(raw);
+      if (!draft.ok) {
+        json(res, 400, { error: draft.error });
+        return;
+      }
+      ctx.broadcast("companion_draft", { text: draft.text });
+      json(res, 200, { ok: true });
+    });
+    return true;
+  }
+
   if (method === "GET" && url === "/skills") {
     json(res, 200, { skills: skillRows(ctx.session.getSkills()) });
     return true;

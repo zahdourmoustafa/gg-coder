@@ -277,6 +277,8 @@ function App(): React.ReactElement {
   const lastProgressXpRef = useRef<number | null>(null);
   const [confettiNonce, setConfettiNonce] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  // The last text the phone put in the message box (see showCompanionDraft).
+  const companionDraftRef = useRef("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [displayPlaceholder, setDisplayPlaceholder] = useState(DEFAULT_INPUT_PLACEHOLDER);
   const displayPlaceholderRef = useRef(DEFAULT_INPUT_PLACEHOLDER);
@@ -998,6 +1000,7 @@ function App(): React.ReactElement {
     handleAutopilotEvent,
     handleActivityEvent,
     onCompanionOpen: openForCompanion,
+    onCompanionDraft: showCompanionDraft,
     setState,
     setTasks,
     setProjectTasks,
@@ -2442,6 +2445,23 @@ function App(): React.ReactElement {
    * session, then reset and re-hydrate — so the phone's prompts run here, on
    * screen, rather than in a session no window displays.
    */
+  /**
+   * Show what the user is typing on the phone in the message box. The phone
+   * leads while it types; clearing ("") only removes the phone's own text, so
+   * anything typed at the keyboard since is never wiped.
+   */
+  function showCompanionDraft(text: string): void {
+    if (text === "") {
+      const shown = companionDraftRef.current;
+      companionDraftRef.current = "";
+      setInput((current) => (shown !== "" && current === shown ? "" : current));
+      return;
+    }
+    companionDraftRef.current = text;
+    setInput(text);
+    setCaret(text.length);
+  }
+
   function openForCompanion(request: { cwd: string; sessionPath?: string }): void {
     void selectProject(request.cwd, request.sessionPath)
       .then(() =>

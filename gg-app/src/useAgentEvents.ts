@@ -104,6 +104,8 @@ export interface AgentEventsDeps {
   handleActivityEvent?: (e: SidecarEvent) => void;
   /** A companion (tappy) asked this window to show a conversation. */
   onCompanionOpen?: (request: { cwd: string; sessionPath?: string }) => void;
+  /** What the user is typing on the phone; "" once it is sent or cleared. */
+  onCompanionDraft?: (text: string) => void;
 
   setState: Dispatch<SetStateAction<AgentState | null>>;
   setTasks: Dispatch<SetStateAction<BackgroundTask[]>>;
@@ -158,6 +160,7 @@ export function useAgentEvents(deps: AgentEventsDeps): AgentEvents {
     handleAutopilotEvent,
     handleActivityEvent,
     onCompanionOpen,
+    onCompanionDraft,
     setState,
     setTasks,
     setProjectTasks,
@@ -1219,10 +1222,16 @@ export function useAgentEvents(deps: AgentEventsDeps): AgentEvents {
             });
           }
           break;
+        case "companion_draft":
+          // Live typing from the phone, shown in the message box as it grows.
+          if (typeof d.text === "string") onCompanionDraft?.(d.text);
+          break;
         case "prompt_sent":
           // A companion (tappy, from the phone) sent this. The window's own
           // sends already pushed their bubble, so only foreign origins render.
           if (isForeignPrompt(d)) {
+            // Sent: the phone's draft in the message box has become this bubble.
+            onCompanionDraft?.("");
             endStreamingText();
             stickToBottomRef.current = true;
             pushItem({ kind: "user", id: nextId(), text: String(d.text) });
@@ -1492,6 +1501,7 @@ export function useAgentEvents(deps: AgentEventsDeps): AgentEvents {
       handleAutopilotEvent,
       handleActivityEvent,
       onCompanionOpen,
+    onCompanionDraft,
       appendAssistant,
       pushItem,
       finalizeThinking,
