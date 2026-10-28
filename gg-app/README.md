@@ -4,7 +4,7 @@ The Tauri 2 desktop app. React 19 + Vite webview over the full GG Coder agent. T
 thing we ship. The CLI is the same engine without the face.
 
 **Download it:** [latest release](https://github.com/KenKaiii/gg-framework/releases/latest)
-(macOS Apple Silicon `.dmg`, Windows `.exe`). Feature tour is in the
+(macOS Apple Silicon `.dmg`, Windows `.exe`, Linux `.deb` / `.rpm`). Feature tour is in the
 [root README](../README.md).
 
 ## Develop

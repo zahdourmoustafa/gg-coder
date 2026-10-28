@@ -95,10 +95,13 @@ jobs:
           # becomes available. Apple Silicon covers all Macs sold since 2020.
           - platform: windows-latest
             args: ""
-          # NOTE: Linux is intentionally omitted for now. We ship macOS +
-          # Windows only. Re-add an `ubuntu-latest` leg (with
-          # `args: --bundles deb,rpm` — AppImage's linuxdeploy hangs on CI for
-          # Node-bundling apps) when Linux support is prioritized.
+          # Linux x64: `.deb` + `.rpm`. AppImage is skipped (its linuxdeploy step
+          # hangs on CI for Node-bundling apps), so Linux gets no in-app updater
+          # artifact; users update through the new package. 22.04, not latest:
+          # a package links against the builder's glibc, and the older one is
+          # what still installs on Debian 12 / Ubuntu 22.04 / Fedora.
+          - platform: ubuntu-22.04
+            args: "--bundles deb,rpm"
     runs-on: ${{ matrix.platform }}
     # Signing + notarization + per-OS installer builds; observed ~15-20 min,
     # headroom for notarization stalls and cold caches.
