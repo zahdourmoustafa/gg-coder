@@ -22,7 +22,9 @@ name: Release
 #     APPLE_TEAM_ID               — Apple Team ID (396M7LY29W)
 # All signing/notarization credentials live in the protected
 # `desktop-production` environment. Preflight fails closed before any build if
-# credentials are absent; unsigned public releases are never produced.
+# the updater key is absent. macOS is Developer ID signed + notarized when the
+# Apple secrets are present (all of them, or none); with none it is ad-hoc
+# signed, which opens after "Open Anyway" in System Settings > Privacy & Security.
 
 on:
   push:
@@ -95,6 +97,9 @@ jobs:
           # becomes available. Apple Silicon covers all Macs sold since 2020.
           - platform: windows-latest
             args: ""
+          # Apple Silicon. Ad-hoc signed unless the Apple secrets are set.
+          - platform: macos-14
+            args: "--target aarch64-apple-darwin"
           # Linux x64: `.deb` + `.rpm`. AppImage is skipped (its linuxdeploy step
           # hangs on CI for Node-bundling apps), so Linux gets no in-app updater
           # artifact; users update through the new package. 22.04, not latest:
@@ -109,10 +114,6 @@ jobs:
     environment:
       name: desktop-production
       url: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
-    # Hoisted to job level so the certificate-import step's own `if` can read it
-    # (a step cannot reference env it defines in the same step's `if`).
-    env:
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -140,7 +141,9 @@ jobs:
             exit 1
           }
           required=(TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
-          if [[ "$RUNNER_OS" == "macOS" ]]; then
+          # Developer ID signing is all-or-nothing: a partial set fails here
+          # rather than producing a half-signed app. None means ad-hoc.
+          if [[ "$RUNNER_OS" == "macOS" && -n "${APPLE_CERTIFICATE:-}" ]]; then
             required+=(
               APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
               KEYCHAIN_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
@@ -152,6 +155,32 @@ jobs:
               exit 1
             }
           done
+
+      # Exports only what is set, so the Tauri bundler never sees an empty
+      # APPLE_ID or certificate (an empty value still reads as "configured").
+      - name: macOS signing mode
+        id: macsign
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$APPLE_CERTIFICATE" ]]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            for name in APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+              echo "$name=${!name}" >> "$GITHUB_ENV"
+            done
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "::warning::No Apple Developer ID: the macOS build is ad-hoc signed and not notarized."
+          fi
 
       # pnpm version comes from package.json's packageManager field.
       - uses: pnpm/action-setup@v6
@@ -211,8 +240,9 @@ jobs:
       # Developer ID certificate into an ephemeral keychain for nested signing and
       # Tauri notarization.
       - name: Import Apple Developer certificate (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.macsign.outputs.signed == 'true'
         env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
@@ -232,7 +262,7 @@ jobs:
       # the assembled app passes. Runs after the cert is in the keychain and
       # before tauri-action assembles + notarizes the bundle.
       - name: Sign nested bundle binaries (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.macsign.outputs.signed == 'true'
         run: |
           bash gg-app/scripts/sign-nested-macos.sh \
             "${{ secrets.APPLE_SIGNING_IDENTITY }}" \
@@ -249,13 +279,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS signing + notarization; protected-environment preflight
-          # guarantees these are populated on the macOS leg.
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # macOS signing + notarization come from `macOS signing mode` above,
+          # through GITHUB_ENV, and only when they are set.
         with:
           projectPath: gg-app
           tagName: ${{ github.ref_name }}
